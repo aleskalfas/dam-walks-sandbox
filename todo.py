@@ -3,9 +3,11 @@
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 DB = Path("todo.json")
+DUE_FORMAT = "%Y-%m-%d %H:%M"
 
 
 def load(path=DB):
@@ -18,8 +20,11 @@ def save(items, path=DB):
     path.write_text(json.dumps(items, indent=2) + "\n")
 
 
-def add(items, text):
-    items.append({"text": text, "done": False})
+def add(items, text, due=None):
+    item = {"text": text, "done": False}
+    if due is not None:
+        item["due"] = datetime.strptime(due, DUE_FORMAT).isoformat()
+    items.append(item)
     return items
 
 
@@ -32,10 +37,17 @@ def done(items, number):
 
 
 def render(items):
+    now = datetime.now()
     lines = []
     for number, item in enumerate(items, start=1):
         mark = "x" if item["done"] else " "
-        lines.append(f"{number}. [{mark}] {item['text']}")
+        line = f"{number}. [{mark}] {item['text']}"
+        if "due" in item:
+            due = datetime.fromisoformat(item["due"])
+            line += f" (due {due.strftime(DUE_FORMAT)})"
+            if not item["done"] and due < now:
+                line += " OVERDUE"
+        lines.append(line)
     return "\n".join(lines) if lines else "Nothing to do."
 
 
@@ -44,6 +56,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     add_cmd = sub.add_parser("add", help="add an item")
     add_cmd.add_argument("text")
+    add_cmd.add_argument("--due", help='when it is due, as "YYYY-MM-DD HH:MM"')
     sub.add_parser("list", help="list the items")
     done_cmd = sub.add_parser("done", help="mark an item done")
     done_cmd.add_argument("number", type=int)
@@ -51,7 +64,7 @@ def main(argv=None):
 
     items = load()
     if args.command == "add":
-        save(add(items, args.text))
+        save(add(items, args.text, args.due))
     elif args.command == "done":
         try:
             save(done(items, args.number))
